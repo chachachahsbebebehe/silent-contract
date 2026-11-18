@@ -161,7 +161,7 @@ body.touch #speedo{bottom:auto;top:calc(110px + env(safe-area-inset-top))}
   <div id="hud-tl" class="panel"><div class="k1">Contract</div><div id="hud-obj"></div><div id="hud-loc"></div></div>
   <div id="hud-status" class="panel"><div id="st-txt">BLENDING IN</div><div id="det"><i></i></div><div id="alarm"></div></div>
   <canvas id="minimap" width="180" height="180"></canvas>
-  <div id="hud-bl" class="panel"><div class="lbl"><span>HEALTH</span><span id="hp-txt">100</span></div><div class="bar" id="hp-bar"><i></i></div></div>
+  <div id="hud-bl" class="panel"><div class="lbl"><span>HEALTH</span><span id="hp-txt">150</span></div><div class="bar" id="hp-bar"><i></i></div></div>
   <div id="hud-br" class="panel"><div id="hud-wname">Hands · knife</div><div id="hud-ammo">9 <small>/ 27</small></div><div id="hud-coins">Coins: 6</div></div>
   <div id="cross"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i><i class="d"></i></div>
   <div id="ind"></div>
@@ -226,7 +226,7 @@ body.touch #speedo{bottom:auto;top:calc(110px + env(safe-area-inset-top))}
   <div class="help" style="margin-top:0;text-align:left">
   Your <b>disguise</b> decides where you may go: the HUD shows <b style="color:#7fd68a">PUBLIC / ALLOWED</b> or <b style="color:#ff6b5a">TRESPASSING</b>. Guards who catch you trespassing warn you first — leave within a few seconds or they open fire. A visible weapon, carrying a body, running or sneaking near people, or a crime in view raises suspicion. <b>Enforcers</b> see through the disguise of their own department if you get close. If you're seen committing a crime, that disguise is <b>compromised</b> — find a new one.
   People notice → investigate → search → attack. Loud gunshots bring guards running and put the whole area on alert; a suppressed pistol with subsonic mags is barely heard. Bodies that get found trigger a search — drag them into closets, dumpsters, crates, car trunks or bushes. Accidents (chandelier, poison, gas leak) don't raise an alarm.
-  <b>Damage:</b> 1 headshot ≈ ⅔ health (2 always kill) · 2 chest · 3 stomach · 4 leg hits kill. Knife attacks and takedowns on unaware people are instant.
+  <b>Damage:</b> 1 headshot kills (any gun) · 2 chest · 3 stomach · 4 leg hits kill. Knife attacks and takedowns on unaware people are instant.
   </div>
   <div class="ctl" id="ctl-list">
     <div><b>WASD</b> move</div><div><b>Mouse</b> look · <b>Wheel</b> switch weapon</div>
@@ -1713,7 +1713,7 @@ function npcSeesPoint(n, x, y, z, range, fovDeg) {
   if (d > 1.0) { const f = fwdOf(n.yaw), c = (dx * f[0] + dz * f[1]) / d, half = Math.cos(fovDeg / 2 * Math.PI / 180); if (c < half) return -1; }
   if (!losClear(n.x, npcEye(n), n.z, x, y, z)) return -1; return d;
 }
-function visionRange(n) { const s = SITES[n.site]; let r = n.armed || n.revealed ? 21 : 15; if (n.state === 'combat') r = 42; else if (s.mode !== 'calm' && n.armed) r = 27; return r; }
+function visionRange(n) { const s = SITES[n.site]; let r = n.armed || n.revealed ? 16 : 11; if (n.state === 'combat') r = 32; else if (s.mode !== 'calm' && n.armed) r = 20; return r; }
 function npcSeesPlayer(n) {
   if (PL.hidden || PL.dead) return -1; const t = playerTargetPts(); const r = visionRange(n), fov = n.state === 'combat' ? 160 : (n.armed ? 120 : 110);
   let d = npcSeesPoint(n, t.x, t.y, t.z, r, fov); if (d < 0 && t.y2 > 0.3) d = npcSeesPoint(n, t.x, t.y2, t.z, r, fov); return d;
@@ -1723,17 +1723,17 @@ function illegalFor(n) {
   const d = Math.hypot(PL.pos.x - n.x, PL.pos.z - n.z), D = DISGUISES[PL.disguise] || DISGUISES.suit, secOutfit = D.group === 'sec' || D.group === 'dock';
   if (PL.crimeT > 0) up(6, 'crime');
   if (PL.drag) up(2.5, 'body');
-  if (PL.compromised && !PL.car && (n.armed || n.enf || n.kind === 'target')) up(2.4, 'recognized');
+  if (PL.compromised && !PL.car && (n.armed || n.enf || n.kind === 'target')) up(1.6, 'recognized');
   if (weaponVisible()) up(PL.weapon === 'knife' ? 1.0 : (secOutfit && PL.ads < 0.5 && PL.weapon !== 'sniper' ? 0.3 : 1.5), 'weapon');
   if (PL.trespass) up((n.armed || n.kind === 'target') ? 1 : n.kind === 'staff' ? 0.75 : 0, 'trespass');
   // enforcers know their colleagues: same uniform group -> they see through the disguise up close
   const sameGroup = n.disg && DISGUISES[n.disg] && DISGUISES[n.disg].group === D.group && D.group !== 'guest' && D.group !== 'civ';
   if (sameGroup && !PL.car) { const shady = PL.running || (PL.crouch > 0.5 && PL.moving) || weaponVisible();
-    if (n.enf && d < 10) up(0.45 + (1 - d / 10) * 1.6 + (shady ? 1 : 0), 'enforcer');
-    else if (n.armed && shady && d < 5) up(0.9, 'enforcer'); }
+    if (n.enf && d < 6) up(0.2 + (1 - d / 6) * 1.0 + (shady ? 0.6 : 0), 'enforcer');
+    else if (n.armed && shady && d < 3) up(0.6, 'enforcer'); }
   if (PL.car && PL.car.speed > 9) up(0.6, 'driving');
-  if (!PL.car && PL.running) up(secOutfit && SITES[n.site].mode !== 'calm' ? 0.1 : 0.35, 'running');
-  if (!PL.car && PL.crouch > 0.5 && PL.moving) up(0.3, 'sneaking');
+  if (!PL.car && PL.running) up(secOutfit && SITES[n.site].mode !== 'calm' ? 0.05 : 0.2, 'running');
+  if (!PL.car && PL.crouch > 0.5 && PL.moving) up(0.15, 'sneaking');
   return [w, why];
 }
 // ---------------- movement ----------------
@@ -1758,8 +1758,8 @@ function investigate(n, x, z, why) {
 }
 function siteAlert(site, mode, x, z) {
   const S = SITES[site]; if (mode === 'combat' || S.mode !== 'combat') { if (S.mode !== mode && mode === 'combat') sfx.radio(); S.mode = mode; } S.t = 0; S.x = x; S.z = z;
-  if (mode === 'search') NPCS.forEach(function (m) { if (!m.dead && m.site === site && m.armed && (m.state === 'route' || m.state === 'follow' && false)) { if (Math.random() < 0.6) investigate(m, x + (Math.random() - 0.5) * 8, z + (Math.random() - 0.5) * 8, 'search'); } });
-  if (mode === 'combat') { MS.combats++; NPCS.forEach(function (m) { if (m.dead || m.site !== site) return; if (m.armed || m.revealed) { if (m.state !== 'combat') { setState(m, 'combat'); m.lastX = x; m.lastZ = z; m.gunCool = 0.6 + Math.random(); } }
+  if (mode === 'search') NPCS.forEach(function (m) { if (!m.dead && m.site === site && m.armed && (m.state === 'route' || m.state === 'follow' && false)) { if (Math.random() < 0.4) investigate(m, x + (Math.random() - 0.5) * 8, z + (Math.random() - 0.5) * 8, 'search'); } });
+  if (mode === 'combat') { MS.combats++; NPCS.forEach(function (m) { if (m.dead || m.site !== site) return; if (m.armed || m.revealed) { if (m.state !== 'combat') { setState(m, 'combat'); m.lastX = x; m.lastZ = z; m.gunCool = 1.0 + Math.random(); } }
       else if (m.kind === 'target') startEscape(m); else if (m.state !== 'flee' && m.state !== 'cower' && m.state !== 'report') { if (Math.hypot(m.x - x, m.z - z) < 35) startFlee(m); } }); }
 }
 function startFlee(n) { if (n.kind === 'target') return startEscape(n); setState(n, 'flee'); n.susp = 1; const F = SITE_FLEE[n.site]; let best = F[0], bd = -1; F.forEach(function (p) { const d = Math.hypot(p[0] - PL.pos.x, p[1] - PL.pos.z) - Math.hypot(p[0] - n.x, p[1] - n.z) * 0.5; if (d > bd) { bd = d; best = p; } }); goTo(n, best[0], best[1], 4.2); }
@@ -1773,7 +1773,7 @@ function spotted(n, why) { // n fully detected the player doing something wrong
   if (n.armed && why === 'trespass' && !n.warned && n.state !== 'combat' && SITES[n.site].mode !== 'combat') { n.warned = true; setState(n, 'warn'); n.warnT = 0; sfx.hey(n.x, n.z); feed(n.name + ': "Hey! You\'re not allowed in here. Leave — now!"'); return; }
   MS.spotted = true; if (n.armed || n.kind === 'target') compromise();
   if (n.sheriff && !n.revealed) reveal(n);
-  if (n.armed) { if (n.state !== 'combat') { sfx.spotted(); sfx.hey(n.x, n.z); setState(n, 'combat'); n.gunCool = 0.5; siteAlert(n.site, 'combat', PL.pos.x, PL.pos.z); } }
+  if (n.armed) { if (n.state !== 'combat') { sfx.spotted(); sfx.hey(n.x, n.z); setState(n, 'combat'); n.gunCool = 0.9; siteAlert(n.site, 'combat', PL.pos.x, PL.pos.z); } }
   else if (n.kind === 'target') { sfx.scream(n.x, n.z); siteAlert(n.site, 'combat', PL.pos.x, PL.pos.z); }
   else if (n.state !== 'report' && n.state !== 'flee') { sfx.spotted(); sfx.scream(n.x, n.z); startReport(n, { type: 'player', x: PL.pos.x, z: PL.pos.z }); }
 }
@@ -1824,8 +1824,8 @@ function updateNPCs(dt) {
   const px = PL.pos.x, pz = PL.pos.z; let maxS = 0, maxN = null;
   for (const k in SITES) { const S = SITES[k]; S.t += dt;
     if (S.mode === 'combat') { const anySee = NPCS.some(function (n) { return n.site === k && !n.dead && n.state === 'combat' && n.seen; }); if (anySee) S.seeT = 0; else S.seeT = (S.seeT || 0) + dt;
-      if (S.seeT > 14 || !NPCS.some(function (n) { return n.site === k && !n.dead && n.armed; })) { S.mode = 'search'; S.t = 0; NPCS.forEach(function (n) { if (n.site === k && n.state === 'combat') { investigate(n, n.lastX + (Math.random() - 0.5) * 10, n.lastZ + (Math.random() - 0.5) * 10, 'search'); } }); feed('They lost you — searching'); } }
-    else if (S.mode === 'search' && S.t > 50) { S.mode = 'calm'; } }
+      if (S.seeT > 9 || !NPCS.some(function (n) { return n.site === k && !n.dead && n.armed; })) { S.mode = 'search'; S.t = 0; NPCS.forEach(function (n) { if (n.site === k && n.state === 'combat') { investigate(n, n.lastX + (Math.random() - 0.5) * 10, n.lastZ + (Math.random() - 0.5) * 10, 'search'); } }); feed('They lost you — searching'); } }
+    else if (S.mode === 'search' && S.t > 30) { S.mode = 'calm'; } }
   for (const n of NPCS) {
     const h = n.h;
     if (n.dead) { if (h.fall && !h.fall.settled) updateFall(h, dt); const b = n.body;
@@ -1864,10 +1864,10 @@ function thinkNPC(n, dt, dp) {
   if (n.state === 'combat') { if (n.seen) { n.lastX = px; n.lastZ = pz; NPCS.forEach(function (m) { if (m.state === 'combat' && m.site === n.site && !m.dead) { m.lastX = px; m.lastZ = pz; } }); } }
   else if (canPerceive && n.state !== 'report' && n.state !== 'warn') {
     const il = illegalFor(n); let w = il[0];
-    if (n.seen && w > 0) { const mult = (S.mode !== 'calm' ? 1.6 : 1) * (PL.crouch > 0.5 ? 0.8 : 1) * (n.state === 'suspicious' ? 1.2 : 1); n.susp = Math.min(1, n.susp + w * 0.45 * clamp(2 - sd / 10, 0.3, 2) * mult * dt); n.lastSawX = px; n.lastSawZ = pz; n.lostT = 0;
-      if (n.susp > 0.3 && n.state !== 'suspicious' && n.state !== 'body') { setState(n, 'suspicious'); sfx.susp(); }
+    if (n.seen && w > 0) { const mult = (S.mode !== 'calm' ? 1.3 : 1) * (PL.crouch > 0.5 ? 0.8 : 1) * (n.state === 'suspicious' ? 1.2 : 1); n.susp = Math.min(1, n.susp + w * 0.28 * clamp(2 - sd / 8, 0.25, 1.8) * mult * dt); n.lastSawX = px; n.lastSawZ = pz; n.lostT = 0;
+      if (n.susp > 0.35 && n.state !== 'suspicious' && n.state !== 'body') { setState(n, 'suspicious'); sfx.susp(); }
       if (n.susp >= 1) { spotted(n, il[1]); return; } }
-    else { n.susp = Math.max(0, n.susp - dt * (S.mode === 'calm' ? 0.12 : 0.07)); n.lostT = (n.lostT || 0) + dt; }
+    else { n.susp = Math.max(0, n.susp - dt * (S.mode === 'calm' ? 0.2 : 0.12)); n.lostT = (n.lostT || 0) + dt; }
     // hearing footsteps right behind them
     if (!PL.hidden && !PL.car && !n.seen && dp < (PL.running ? 7 : 2.4) && PL.moving && PL.crouch < 0.5 && (n.state === 'route' || n.state === 'follow' || n.state === 'search' || n.state === 'investigate')) { n.heardT = 1.0; n.hearX = px; n.hearZ = pz; }
     // bodies
@@ -1893,13 +1893,13 @@ function thinkNPC(n, dt, dp) {
       break; }
     case 'suspicious': {
       n.path = null; const tx = n.seen ? px : n.lastSawX, tz = n.seen ? pz : n.lastSawZ; faceTo(n, tx, tz, dt, 4);
-      if (!n.seen && n.lostT > 2.2) { if (n.susp > 0.45 && n.armed) investigate(n, n.lastSawX, n.lastSawZ, 'seen'); else resumeDefault(n); }
+      if (!n.seen && n.lostT > 1.6) { if (n.susp > 0.6 && n.armed) investigate(n, n.lastSawX, n.lastSawZ, 'seen'); else resumeDefault(n); }
       else if (n.susp < 0.05) resumeDefault(n);
       break; }
     case 'investigate': {
       if (n.path) { if (moveAlong(n, dt)) { n.lookT = 0; } }
-      else { n.lookT += dt; n.yaw += Math.sin(n.lookT * 1.4) * dt * 1.6; if (n.lookT > (n.invWhy === 'search' ? 3 : 4.5)) { if (n.invWhy === 'search' && S.mode !== 'calm' && n.armed && n.timer < 40) investigate(n, S.x + (Math.random() - 0.5) * 16, S.z + (Math.random() - 0.5) * 16, 'search'); else resumeDefault(n); } }
-      if (n.timer > 30 && n.path) resumeDefault(n);
+      else { n.lookT += dt; n.yaw += Math.sin(n.lookT * 1.4) * dt * 1.6; if (n.lookT > (n.invWhy === 'search' ? 2 : 3)) { if (n.invWhy === 'search' && S.mode !== 'calm' && n.armed && n.timer < 20) investigate(n, S.x + (Math.random() - 0.5) * 16, S.z + (Math.random() - 0.5) * 16, 'search'); else resumeDefault(n); } }
+      if (n.timer > 20 && n.path) resumeDefault(n);
       break; }
     case 'body': {
       const b = n.bodyRef; if (!b) { resumeDefault(n); break; }
@@ -1932,12 +1932,12 @@ function thinkNPC(n, dt, dp) {
   }
 }
 function npcShoot(n, d) {
-  n.gunCool = n.sheriff ? 1.1 + Math.random() * 0.5 : 0.55 + Math.random() * 0.5;
+  n.gunCool = n.sheriff ? 1.4 + Math.random() * 0.6 : 0.8 + Math.random() * 0.6;
   const t = playerTargetPts(), ex = n.x + Math.sin(n.yaw) * 0.4, ez = n.z + Math.cos(n.yaw) * 0.4, ey = 1.4 * n.h.scale;
   sfx.enemyShot(n.x, n.z, n.sheriff ? 'revolver' : 'pistol'); lightFlash(ex, ey, ez, 3, 0.05);
-  let p = clamp(0.78 - d * 0.022, 0.15, 0.72); if (PL.crouch > 0.5) p *= 0.8; if (PL.moveSpeed > 3) p *= 0.7; if (PL.car) p *= 0.55; if (PL.hidden) p = 0;
+  let p = clamp(0.55 - d * 0.02, 0.08, 0.5); if (PL.crouch > 0.5) p *= 0.8; if (PL.moveSpeed > 3) p *= 0.7; if (PL.car) p *= 0.55; if (PL.hidden) p = 0;
   const hit = Math.random() < p;
-  if (hit) { addTracer(ex, ey, ez, t.x, t.y2, t.z); damagePlayer(n.sheriff ? 24 : 9 + Math.random() * 6, n.x, n.z); }
+  if (hit) { addTracer(ex, ey, ez, t.x, t.y2, t.z); damagePlayer(n.sheriff ? 16 : 6 + Math.random() * 4, n.x, n.z); }
   else { const mx = t.x + (Math.random() - 0.5) * 2.5, my = t.y2 + (Math.random() - 0.4) * 1.5, mz = t.z + (Math.random() - 0.5) * 2.5; addTracer(ex, ey, ez, mx, my, mz); if (d < 25) sfx.whiz(); }
   emitNoise(n.x, n.z, 38, 'gunshot');
 }
@@ -1956,15 +1956,15 @@ function updateCone(n, dp) {
 
 // ---------------- loadout, weapons, attachments, damage model ----------------
 // Hit-location damage (applies to EVERY NPC, every gun): max health 100
-//   head 66.7 (1.5 shots -> two headshots always kill) · chest 50 (2 shots) · stomach 34 (3 shots) · legs 25 (4 shots) · arms 25
+//   head 100 (ONE headshot kills, any gun) · chest 50 (2 shots) · stomach 34 (3 shots) · legs 25 (4 shots) · arms 25
 const NPC_MAX_HP = 100;
-const ZONE_DMG = { head: 200 / 3, chest: 50, stomach: 34, leg: 25, arm: 25 };
+const ZONE_DMG = { head: 100, chest: 50, stomach: 34, leg: 25, arm: 25 };
 const ZONE_LABEL = { head: 'HEAD', chest: 'CHEST', stomach: 'STOMACH', leg: 'LEG', arm: 'ARM' };
 const WEAPONS = {
   knife: { name: 'Combat Knife', short: 'KNIFE' },
-  pistol: { name: 'SP-9 Pistol', short: 'PISTOL', mag: [12, 10], reserveMags: 3, cool: 0.17, auto: false, spread: 0.011, adsSpread: 0.0012, kick: 1, recoil: 0.018, snd: 'pistol' },
-  smg: { name: 'KR-9 SMG', short: 'SMG', mag: [30, 25], reserveMags: 3, cool: 0.075, auto: true, spread: 0.024, adsSpread: 0.0045, kick: 0.55, recoil: 0.009, snd: 'smg' },
-  sniper: { name: 'VK-12 Sniper Rifle', short: 'SNIPER', mag: [5, 5], reserveMags: 3, cool: 1.15, auto: false, spread: 0.05, adsSpread: 0.0002, kick: 1.3, recoil: 0.045, snd: 'sniper', scope: true }
+  pistol: { name: 'SP-9 Pistol', short: 'PISTOL', mag: [12, 10], reserveMags: 6, cool: 0.17, auto: false, spread: 0.011, adsSpread: 0.0012, kick: 1, recoil: 0.018, snd: 'pistol' },
+  smg: { name: 'KR-9 SMG', short: 'SMG', mag: [30, 25], reserveMags: 6, cool: 0.075, auto: true, spread: 0.024, adsSpread: 0.0045, kick: 0.55, recoil: 0.009, snd: 'smg' },
+  sniper: { name: 'VK-12 Sniper Rifle', short: 'SNIPER', mag: [5, 5], reserveMags: 6, cool: 1.15, auto: false, spread: 0.05, adsSpread: 0.0002, kick: 1.3, recoil: 0.045, snd: 'sniper', scope: true }
 };
 // noise radius (m): unsuppressed = everyone around hears a GUNSHOT; suppressed = a muffled thump; suppressed + subsonic mag = almost silent
 function shotNoise(G) { return !G.sup ? { r: G.id === 'sniper' ? 80 : 55, kind: 'gunshot' } : G.sub ? { r: 3.5, kind: 'noise' } : { r: 10, kind: 'noise' }; }
@@ -2273,7 +2273,8 @@ function compromise() { MS.compromised[PL.disguise] = true; }
 // ---------------- the player ----------------
 const START = { x: 4.5, z: 37.4, yaw: -Math.PI / 2 };
 const STARTS = { bus: { x: 4.5, z: 37.4, yaw: -Math.PI / 2, disguise: 'suit', name: 'Harbor Road bus stop' }, docks: { x: 97.5, z: 20.5, yaw: Math.PI / 2, disguise: 'worker', name: 'Docks locker room' }, yard: { x: 79.5, z: 70.5, yaw: -Math.PI / 2, disguise: 'waiter', name: 'Estate service yard' } };
-const PL = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, pitch: 0, crouch: 0, crouchWant: false, hp: 100, dead: false, hidden: null, hiddenSafe: true, car: null, drag: null,
+const PL_MAX_HP = 150;
+const PL = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, pitch: 0, crouch: 0, crouchWant: false, hp: PL_MAX_HP, dead: false, hidden: null, hiddenSafe: true, car: null, drag: null,
   weapon: 'none', guns: {}, knives: 0, ads: 0, adsWant: false, coins: 4, disguise: 'suit', compromised: false, item: null, running: false, moving: false, moveSpeed: 0, trespass: false, crimeT: 0, takedown: null, reloadT: 0, fireCool: 0, stepT: 0, hurtT: 0, drawT: 0, bob: 0, kick: 0 };
 const MS = { time: 0, spotted: false, bodiesFound: 0, nonTargets: 0, combats: 0, targets: {}, shots: 0, headshots: 0, takedowns: 0, kos: 0, hiddenBodies: 0, escaping: null, over: false, accidents: 0, disguises: 1, compromised: {}, targetCause: {} };
 function lightFlash(x, y, z, intensity, dur, color) { if (qualityLevel === 'low') return; flashLight.position.set(x, y, z); flashLight.intensity = intensity; flashLight.color.setHex(color || 0xffc870); flashT = dur; }
@@ -2357,7 +2358,7 @@ const keys = {}; let mouseDown = false;
 function updatePlayer(dt, inp) {
   if (PL.crimeT > 0) PL.crimeT -= dt; PL.hurtT += dt;
   updateWeapons(dt, inp); PL.compromised = !!MS.compromised[PL.disguise];
-  if (PL.hurtT > 6 && PL.hp < 100 && !PL.dead) PL.hp = Math.min(100, PL.hp + dt * 7);
+  if (PL.hurtT > 4 && PL.hp < PL_MAX_HP && !PL.dead) PL.hp = Math.min(PL_MAX_HP, PL.hp + dt * 12);
   { const ax = PL.car ? PL.car.x : PL.pos.x, az = PL.car ? PL.car.z : PL.pos.z; PL.area = areaAt(ax, az); PL.trespass = !disguiseAllows(PL.disguise, PL.area); }
   if (PL.takedown) { updateTakedown(dt); PL.moving = false; PL.running = false; PL.moveSpeed = 0; return; }
   if (PL.car) { const c = PL.car, crash = driveCar(c, dt, inp.thr, inp.steer, inp.hand); PL.pos.set(c.x, 0, c.z); PL.moveSpeed = Math.abs(c.speed); PL.moving = PL.moveSpeed > 0.5; PL.running = false;
@@ -2398,7 +2399,7 @@ function updateCamera(dt) {
 }
 function resetPlayer() {
   const S0 = STARTS[LOADOUT.start] || STARTS.bus;
-  Object.assign(PL, { yaw: S0.yaw, pitch: 0, crouch: 0, crouchWant: false, hp: 100, dead: false, hidden: null, car: null, drag: null, coins: 4, crimeT: 0, takedown: null, camYaw: null, disguise: S0.disguise, compromised: false, item: null, scoped: false });
+  Object.assign(PL, { yaw: S0.yaw, pitch: 0, crouch: 0, crouchWant: false, hp: PL_MAX_HP, dead: false, hidden: null, car: null, drag: null, coins: 4, crimeT: 0, takedown: null, camYaw: null, disguise: S0.disguise, compromised: false, item: null, scoped: false });
   PL.pos.set(S0.x, 0, S0.z); PL.vel.set(0, 0, 0); resetWeapons(); setSleeveColor(PLAYER_SLEEVE[PL.disguise]);
   COINS.forEach(function (c) { scene.remove(c.m); }); COINS.length = 0;
 }
@@ -2646,7 +2647,7 @@ function updateHUD(dt, det) {
   oh += '<div class="ex' + (done ? '' : '" style="opacity:.45') + '">Exit: bus stop, dinghy or drive out</div>'; if (MS.escaping && !MS.escaping.dead) oh += '<div style="color:#ff6b5a">' + MS.escaping.name + ' is escaping! ' + Math.max(0, 7 - MS.escaping.escT).toFixed(0) + 's</div>';
   const ob = $('hud-obj'); if (ob.innerHTML !== oh) ob.innerHTML = oh;
   const a = areaAt(PL.pos.x, PL.pos.z), D = DISGUISES[PL.disguise]; const lh = AREAS[a][0] + (PL.trespass ? '<b class="res">TRESPASSING</b>' : AREAS[a][1] ? '<b class="pub">ALLOWED</b>' : '<b class="pub">PUBLIC</b>') + '<br><span class="dg">Disguise: <b class="' + (PL.compromised ? 'res' : 'dsg') + '">' + D.label.toUpperCase() + (PL.compromised ? ' · COMPROMISED' : '') + '</b></span>'; if ($('hud-loc').innerHTML !== lh) $('hud-loc').innerHTML = lh;
-  $('hp-txt').textContent = Math.ceil(PL.hp); $('hp-bar').firstElementChild.style.width = PL.hp + '%';
+  $('hp-txt').textContent = Math.ceil(PL.hp); $('hp-bar').firstElementChild.style.width = (PL.hp / PL_MAX_HP * 100) + '%';
   const G = curGun(); let wn = PL.weapon === 'knife' ? 'Combat knife' : PL.weapon === 'none' ? 'Unarmed' : WEAPONS[PL.weapon].name;
   if (G) wn += G.sup ? ' · suppressed' : G.hasSup ? ' · suppressor off' : ' · LOUD'; if (G && G.sub) wn += ' · subsonic';
   $('hud-wname').textContent = wn; $('hud-ammo').innerHTML = G ? G.mag + ' <small>/ ' + G.reserve + (PL.reloadT > 0 ? ' · RELOADING' : PL.supT > 0 ? ' · ' + (G.sup ? 'REMOVING' : 'FITTING') + ' SUPPRESSOR' : '') + '</small>' : '— <small>' + (touch.mode ? 'WEAPON' : '1-5 / ' + K('weaponNext')) + ' to switch</small>';
