@@ -227,6 +227,7 @@ body.touch #speedo{bottom:auto;top:calc(110px + env(safe-area-inset-top))}
   Your <b>disguise</b> decides where you may go: the HUD shows <b style="color:#7fd68a">PUBLIC / ALLOWED</b> or <b style="color:#ff6b5a">TRESPASSING</b>. Guards who catch you trespassing warn you first — leave within a few seconds or they open fire. A visible weapon, carrying a body, running or sneaking near people, or a crime in view raises suspicion. <b>Enforcers</b> see through the disguise of their own department if you get close. If you're seen committing a crime, that disguise is <b>compromised</b> — find a new one.
   People notice → investigate → search → attack. Loud gunshots bring guards running and put the whole area on alert; a suppressed pistol with subsonic mags is barely heard. Bodies that get found trigger a search — drag them into closets, dumpsters, crates, car trunks or bushes. Accidents (chandelier, poison, gas leak) don't raise an alarm.
   <b>Damage:</b> 1 headshot kills (any gun) · 2 chest · 3 stomach · 4 leg hits kill. Knife attacks and takedowns on unaware people are instant.
+  <b>Sniper towers</b> (gold <b style="color:#e8c27a">T</b> squares on the minimap): walk to the ladder and press <b>E</b> (or <b>ACTION</b> on touch) to climb, and again at the hatch to climb down. Up top you can see over most of the map, and guards only notice you if they're close — perfect for the sniper rifle.
   </div>
   <div class="ctl" id="ctl-list">
     <div><b>WASD</b> move</div><div><b>Mouse</b> look · <b>Wheel</b> switch weapon</div>
@@ -1715,7 +1716,8 @@ function npcSeesPoint(n, x, y, z, range, fovDeg) {
 }
 function visionRange(n) { const s = SITES[n.site]; let r = n.armed || n.revealed ? 16 : 11; if (n.state === 'combat') r = 32; else if (s.mode !== 'calm' && n.armed) r = 20; return r; }
 function npcSeesPlayer(n) {
-  if (PL.hidden || PL.dead) return -1; const t = playerTargetPts(); const r = visionRange(n), fov = n.state === 'combat' ? 160 : (n.armed ? 120 : 110);
+  if (PL.hidden || PL.dead) return -1; const t = playerTargetPts(); let r = visionRange(n); const fov = n.state === 'combat' ? 160 : (n.armed ? 120 : 110);
+  if ((PL.elev || 0) > 3) r = Math.min(r, n.state === 'combat' ? 30 : 12); // up a sniper tower: only spotted close by (or once they're shooting at you)
   let d = npcSeesPoint(n, t.x, t.y, t.z, r, fov); if (d < 0 && t.y2 > 0.3) d = npcSeesPoint(n, t.x, t.y2, t.z, r, fov); return d;
 }
 function illegalFor(n) {
@@ -1840,7 +1842,7 @@ function updateNPCs(dt) {
     for (const m of NPCS) { if (m === n || m.dead) continue; const dx = n.x - m.x, dz = n.z - m.z, d2 = dx * dx + dz * dz; if (d2 < 0.36 && d2 > 1e-6) { const d = Math.sqrt(d2), push = (0.6 - d) * 0.5; n.x += dx / d * push; n.z += dz / d * push; } }
     const P = { x: n.x, z: n.z }; collideCircle(P, 0.27); n.x = P.x; n.z = P.z;
     h.root.position.set(n.x, 0, n.z); h.root.rotation.y = n.yaw;
-    const vis = dp < QUALITY_PRESETS[qualityLevel].npcDraw; h.root.visible = vis;
+    const vis = dp < QUALITY_PRESETS[qualityLevel].npcDraw * ((PL.elev || 0) > 3 ? 1.6 : 1); h.root.visible = vis;
     if (n.bleed && settings.blood && Math.random() < dt * n.bleed * 1.5) floorDecal('splat', n.x + (Math.random() - 0.5) * 0.3, n.z + (Math.random() - 0.5) * 0.3, 0.18 + Math.random() * 0.15);
     if (vis && (!n.lod)) { const mode = n.animOverride ? n.animOverride : ((n.state === 'combat' && n.seen) || n.state === 'warn' || (n.armed && n.state === 'investigate' && n.invWhy === 'gunshot')) ? 'aim' : (n.state === 'flee' || n.state === 'cower' || n.state === 'report' || (n.state === 'escape')) && !n.armed ? 'panic' : (n.def.look === 'waiter' ? 'tray' : 'walk');
       animHuman(h, ndt, n.curSpeed, mode, n.look); }
@@ -1864,12 +1866,12 @@ function thinkNPC(n, dt, dp) {
   if (n.state === 'combat') { if (n.seen) { n.lastX = px; n.lastZ = pz; NPCS.forEach(function (m) { if (m.state === 'combat' && m.site === n.site && !m.dead) { m.lastX = px; m.lastZ = pz; } }); } }
   else if (canPerceive && n.state !== 'report' && n.state !== 'warn') {
     const il = illegalFor(n); let w = il[0];
-    if (n.seen && w > 0) { const mult = (S.mode !== 'calm' ? 1.3 : 1) * (PL.crouch > 0.5 ? 0.8 : 1) * (n.state === 'suspicious' ? 1.2 : 1); n.susp = Math.min(1, n.susp + w * 0.28 * clamp(2 - sd / 8, 0.25, 1.8) * mult * dt); n.lastSawX = px; n.lastSawZ = pz; n.lostT = 0;
+    if (n.seen && w > 0) { const mult = (S.mode !== 'calm' ? 1.3 : 1) * (PL.crouch > 0.5 ? 0.8 : 1) * (n.state === 'suspicious' ? 1.2 : 1) * ((PL.elev || 0) > 3 ? 0.5 : 1); n.susp = Math.min(1, n.susp + w * 0.28 * clamp(2 - sd / 8, 0.25, 1.8) * mult * dt); n.lastSawX = px; n.lastSawZ = pz; n.lostT = 0;
       if (n.susp > 0.35 && n.state !== 'suspicious' && n.state !== 'body') { setState(n, 'suspicious'); sfx.susp(); }
       if (n.susp >= 1) { spotted(n, il[1]); return; } }
     else { n.susp = Math.max(0, n.susp - dt * (S.mode === 'calm' ? 0.2 : 0.12)); n.lostT = (n.lostT || 0) + dt; }
     // hearing footsteps right behind them
-    if (!PL.hidden && !PL.car && !n.seen && dp < (PL.running ? 7 : 2.4) && PL.moving && PL.crouch < 0.5 && (n.state === 'route' || n.state === 'follow' || n.state === 'search' || n.state === 'investigate')) { n.heardT = 1.0; n.hearX = px; n.hearZ = pz; }
+    if (!PL.hidden && !PL.car && !offGround() && !n.seen && dp < (PL.running ? 7 : 2.4) && PL.moving && PL.crouch < 0.5 && (n.state === 'route' || n.state === 'follow' || n.state === 'search' || n.state === 'investigate')) { n.heardT = 1.0; n.hearX = px; n.hearZ = pz; }
     // bodies
     if (n.discT <= 0) { n.discT = 0.3; for (const b of BODIES) { if (b.cont || b.dragging && b.found) continue; const bx2 = b.dragging ? PL.pos.x : b.x, bz = b.dragging ? PL.pos.z : b.z; if (Math.hypot(bx2 - n.x, bz - n.z) > 16) continue;
         if (npcSeesPoint(n, b.x, 0.28, b.z, 16, 120) >= 0) { if (!b.found || (n.armed && n.state !== 'body' && SITES[n.site].mode === 'calm')) { bodyFound(n, b); break; } } } }
@@ -2055,7 +2057,7 @@ function hasSlot(w) { return w === 'none' || (w === 'knife' ? PL.hasKnife : !!PL
 function weaponVisible() { return PL.weapon !== 'none' && !PL.car && !PL.hidden; }
 const SLOT_ORDER = ['none', 'knife', 'pistol', 'smg', 'sniper'];
 function equip(w) {
-  if (PL.car || PL.hidden || PL.drag || PL.takedown) return; if (!hasSlot(w)) { toast('No ' + WEAPONS[w].name + ' in your loadout', 1.2); return; }
+  if (PL.car || PL.hidden || PL.drag || PL.takedown || PL.climb) return; if (!hasSlot(w)) { toast('No ' + WEAPONS[w].name + ' in your loadout', 1.2); return; }
   if (PL.weapon === w) w = 'none'; if (PL.weapon !== w) { sfx.draw(); PL.weapon = w; PL.drawT = w === 'none' ? 0 : 0.35; PL.reloadT = 0; PL.supT = 0; PL.adsWant = false; }
 }
 function cycleWeapon(dir) { const L = SLOT_ORDER.length; let i = SLOT_ORDER.indexOf(PL.weapon); for (let k = 0; k < L; k++) { i = (i + (dir || 1) + L) % L; if (hasSlot(SLOT_ORDER[i])) break; } const w = SLOT_ORDER[i]; if (w === PL.weapon) return; if (PL.car || PL.hidden || PL.drag || PL.takedown) return; sfx.draw(); PL.weapon = w; PL.drawT = w === 'none' ? 0 : 0.35; PL.reloadT = 0; PL.supT = 0; }
@@ -2068,7 +2070,7 @@ function toggleSuppressor() { const G = curGun(); if (!G) { toast('Draw a gun fi
 const ray = new THREE.Raycaster(), _hv = new THREE.Vector3();
 function npcParts(o, maxD) { const parts = []; NPCS.forEach(function (n) { if (n.h.root.visible && Math.hypot(n.x - o.x, n.z - o.z) < maxD + 2 && !(n.dead && n.body && n.body.cont)) n.h.parts.forEach(function (p) { parts.push(p); }); }); return parts; }
 function fire() { // primary action (click / FIRE)
-  if (state !== 'play' || PL.dead || PL.car || PL.hidden || PL.drag || PL.takedown) return;
+  if (state !== 'play' || PL.dead || PL.car || PL.hidden || PL.drag || PL.takedown || PL.climb) return;
   if (PL.weapon === 'knife') return knifeAttack();
   if (PL.boltT > 0) return;
   if (PL.weapon === 'none') { // fists: subdue if possible, otherwise draw the pistol
@@ -2144,7 +2146,7 @@ const KNIVES = [];
 const thrownGeo = (function () { const b = new Bucket(); b.geo(GEO.box, 0, 0, -0.08, 0, 0.004, 0.026, 0.16, 0xd8dce0); b.geo(GEO.box, 0, 0, 0.04, 0, 0.018, 0.024, 0.09, 0x1c1c1e); const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(b.p, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(b.n, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(b.c, 3)); return g; })();
 const thrownMat = stdMat({ vertexColors: true, metalness: 0.8, roughness: 0.25 });
 function throwKnife() {
-  if (state !== 'play' || PL.dead || PL.car || PL.hidden || PL.takedown || PL.drag) return; if (PL.knives <= 0) { toast('No throwing knives left', 1.1); return; } if (PL.throwT > 0) return;
+  if (state !== 'play' || PL.dead || PL.car || PL.hidden || PL.takedown || PL.drag || PL.climb) return; if (PL.knives <= 0) { toast('No throwing knives left', 1.1); return; } if (PL.throwT > 0) return;
   PL.knives--; PL.throwT = 0.5; sfx.swish(); PL.crimeT = Math.max(PL.crimeT, 0.8);
   const d = camFwd(), m = new THREE.Mesh(thrownGeo, thrownMat); m.castShadow = true; scene.add(m);
   KNIVES.push({ m: m, p: new THREE.Vector3(PL.pos.x + d.x * 0.3, eyeH() - 0.05, PL.pos.z + d.z * 0.3), v: d.clone().multiplyScalar(26), t: 0, stuck: false });
@@ -2167,7 +2169,7 @@ function updateWeapons(dt, inp) {
   const G = curGun();
   if (PL.reloadT > 0) { PL.reloadT -= dt; if (PL.reloadT <= 0 && G) { const M = WEAPONS[G.id].mag[G.sub ? 1 : 0], take = Math.min(M - G.mag, G.reserve); G.mag += take; G.reserve -= take; } }
   if (PL.supT > 0) { PL.supT -= dt; if (PL.supT <= 0 && PL.supGun) { PL.supGun.sup = !PL.supGun.sup; toast(PL.supGun.sup ? 'SUPPRESSOR FITTED' : 'SUPPRESSOR REMOVED — LOUD', 1.3, PL.supGun.sup ? '#9fd3ff' : '#ff8a5a'); sfx.reloadIn(); } }
-  if (inp.fireHeld && G && WEAPONS[G.id].auto && G.mag > 0 && !PL.car && !PL.hidden && !PL.takedown && !PL.drag && state === 'play') fireShot();
+  if (inp.fireHeld && G && WEAPONS[G.id].auto && G.mag > 0 && !PL.car && !PL.hidden && !PL.takedown && !PL.drag && !PL.climb && state === 'play') fireShot();
   PL.ads += ((PL.adsWant && G && PL.reloadT <= 0 && PL.supT <= 0 ? 1 : 0) - PL.ads) * Math.min(1, dt * (G && G.id === 'sniper' ? 7 : 10));
   if (PL.boltT > 0) PL.boltT -= dt;
   // sniper scope sway + hold breath
@@ -2261,7 +2263,7 @@ const ACC = (function () {
   };
 })();
 // ---------------- disguises ----------------
-function disguiseBody() { const b = nearestBody(1.9); if (!b || b.n.stripped) return null; const d = LOOK_DISGUISE[b.n.def.look]; if (!d || d === PL.disguise) return null; return { b: b, d: d }; }
+function disguiseBody() { if (offGround()) return null; const b = nearestBody(1.9); if (!b || b.n.stripped) return null; const d = LOOK_DISGUISE[b.n.def.look]; if (!d || d === PL.disguise) return null; return { b: b, d: d }; }
 function takeDisguise() {
   if (state !== 'play' || PL.dead || PL.car || PL.hidden || PL.takedown || PL.drag) return false; const t = disguiseBody(); if (!t) return false;
   const n = t.b.n; n.stripped = true; setOutfit(n.h, strippedOutfit(n.h.outfit)); PL.disguise = t.d; MS.disguises++; setSleeveColor(PLAYER_SLEEVE[t.d]); sfx.cloth();
@@ -2270,26 +2272,95 @@ function takeDisguise() {
 }
 function compromise() { MS.compromised[PL.disguise] = true; }
 
+// ---------------- sniper towers: climbable watchtowers with a view over the map ----------------
+// footprint = 2x2 solid cells (x..x+1, z..z+1); ladder on side (dx,dz); platform TOWER_Y m up, railing all round
+const TOWER_Y = 13, TOWER_HALF = 2.2, TOWER_WALK = 1.85, TOWER_CLIMB_T = 2.0;
+const TOWERS = [
+  { name: 'Harbor Watchtower', x: 42, z: 16, dx: 0, dz: 1, lookX: 20, lookZ: 45 },
+  { name: 'Dockside Tower', x: 150, z: 12, dx: 0, dz: 1, lookX: 100, lookZ: 18 },
+  { name: 'Park Tower', x: 35, z: 87, dx: 1, dz: 0, lookX: 40, lookZ: 60 },
+  { name: 'West Garden Tower', x: 75, z: 96, dx: 0, dz: -1 },
+  { name: 'East Garden Tower', x: 157, z: 87, dx: -1, dz: 0 }
+];
+TOWERS.forEach(function (T) { T.cx = T.x + 1; T.cz = T.z + 1; T.lookX = T.lookX || 110; T.lookZ = T.lookZ || 62; // face the mansion on arrival
+  T.base = { x: T.cx + T.dx * 1.75, z: T.cz + T.dz * 1.75 };   // stand here (ground) to climb up
+  T.lad = { x: T.cx + T.dx * 1.32, z: T.cz + T.dz * 1.32 };    // on the ladder while climbing
+  T.top = { x: T.cx + T.dx * 1.1, z: T.cz + T.dz * 1.1 };    // hatch on the platform (climb down here)
+  rect(T.x, T.z, T.x + 1, T.z + 1, function (i) { GR.solid[i] = 1; GR.hgt[i] = Math.max(GR.hgt[i], 2.5); }); });
+(function buildTowers() {
+  const st = new Bucket(), wd = new Bucket(), STEEL = 0x5d6066, DARK = 0x3a3d42, PLANK = 0x8a6a48, RAIL = 0xb8902a, ROOF = 0x4a4f45, KICK = 0x4a3a2a;
+  TOWERS.forEach(function (T) { const cx = T.cx, cz = T.cz, Y = TOWER_Y, px = -T.dz, pz = T.dx, H = TOWER_HALF - 0.05;
+    // box given in tower-local coords: a = along ladder dir, p = across it
+    const lbox = function (b, a0, a1, p0, p1, y, h, col) { const am = (a0 + a1) / 2, pm = (p0 + p1) / 2, x = cx + T.dx * am + px * pm, z = cz + T.dz * am + pz * pm;
+      const sa = a1 - a0, sp = p1 - p0; b.geo(GEO.box, x, y + h / 2, z, 0, T.dx ? sa : sp, h, T.dx ? sp : sa, col); };
+    // four legs + cross braces every 3 m
+    [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(function (s) { st.geo(GEO.box, cx + s[0] * 0.9, Y / 2, cz + s[1] * 0.9, 0, 0.22, Y, 0.22, STEEL); });
+    for (let y = 1.5; y < Y - 1; y += 3) { [[0, -0.9, 1.8, 0.12], [0, 0.9, 1.8, 0.12], [-0.9, 0, 0.12, 1.8], [0.9, 0, 0.12, 1.8]].forEach(function (b) { st.geo(GEO.box, cx + b[0], y, cz + b[1], 0, b[2], 0.12, b[3], DARK); });
+      [[0, -0.9, 0, 1], [0, 0.9, 0, -1], [-0.9, 0, Math.PI / 2, 1], [0.9, 0, Math.PI / 2, -1]].forEach(function (b) { st.geo(GEO.box, cx + b[0], y + 1.5, cz + b[1], b[2], 3.4, 0.07, 0.07, DARK, 0, 1.03 * b[3]); }); }
+    // ladder: from the ground up through a hatch in the deck
+    const lx = cx + T.dx * 1.08, lz = cz + T.dz * 1.08;
+    [-1, 1].forEach(function (s) { st.geo(GEO.box, lx + px * 0.28 * s, (Y + 1.1) / 2, lz + pz * 0.28 * s, 0, 0.07, Y + 1.1, 0.07, RAIL); });
+    for (let y = 0.3; y < Y; y += 0.35) st.geo(GEO.box, lx, y, lz, T.dx ? 0 : Math.PI / 2, 0.05, 0.05, 0.56, RAIL);
+    // deck (with a 0.8 x 0.8 hatch where the ladder comes through)
+    const D = TOWER_HALF, dy = Y - 0.24;
+    lbox(wd, -D, 0.7, -D, D, dy, 0.24, PLANK); lbox(wd, 1.5, D, -D, D, dy, 0.24, PLANK); lbox(wd, 0.7, 1.5, -D, -0.4, dy, 0.24, PLANK); lbox(wd, 0.7, 1.5, 0.4, D, dy, 0.24, PLANK);
+    // railing on all four sides: kickboard, two rails, posts
+    [[-H, -H, -H, H], [H, H, -H, H], [-H, H, -H, -H], [-H, H, H, H]].forEach(function (e) { const t = 0.06;
+      const a0 = e[0] === e[1] ? e[0] - t / 2 : e[0], a1 = e[0] === e[1] ? e[1] + t / 2 : e[1], p0 = e[2] === e[3] ? e[2] - t / 2 : e[2], p1 = e[2] === e[3] ? e[3] + t / 2 : e[3];
+      lbox(st, a0, a1, p0, p1, Y, 0.28, KICK); lbox(st, a0, a1, p0, p1, Y + 0.45, 0.06, RAIL); lbox(st, a0, a1, p0, p1, Y + 0.88, 0.06, RAIL); });
+    [[-1, -1], [1, -1], [1, 1], [-1, 1], [0, -1], [0, 1], [-1, 0], [1, 0]].forEach(function (s) { st.geo(GEO.box, cx + s[0] * H, Y + 0.47, cz + s[1] * H, 0, 0.08, 0.94, 0.08, STEEL); });
+    // canopy on four posts + red beacon
+    [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(function (s) { st.geo(GEO.box, cx + s[0] * H, Y + 1.5, cz + s[1] * H, 0, 0.08, 3.0, 0.08, STEEL); });
+    st.geo(GEO.box, cx, Y + 3.05, cz, 0, D * 2 + 0.4, 0.1, D * 2 + 0.4, ROOF);
+    st.geo(GEO.box, cx, Y + 3.2, cz, 0, 0.18, 0.18, 0.18, 0xd02020);
+  });
+  const m1 = st.mesh(MAT.vcShiny); if (m1) world.add(m1); const m2 = wd.mesh(MAT.vc); if (m2) world.add(m2);
+})();
+function offGround() { return !!(PL.tower || PL.climb); }
+function nearTowerBase() { if (PL.car || PL.hidden || PL.drag || PL.takedown || offGround()) return null; let best = null, bd = 1.3; TOWERS.forEach(function (T) { const d = Math.hypot(T.base.x - PL.pos.x, T.base.z - PL.pos.z); if (d < bd) { bd = d; best = T; } }); return best; }
+function nearTowerHatch() { const T = PL.tower; if (!T || PL.climb) return null; return Math.hypot(T.top.x - PL.pos.x, T.top.z - PL.pos.z) < 0.8 ? T : null; }
+function towerPrompt() { if (PL.climb) return ''; if (nearTowerHatch()) return 'Climb down'; if (nearTowerBase()) return 'Climb tower'; return ''; }
+function actionTower() {
+  if (state !== 'play' || PL.dead || PL.climb) return PL.climb ? true : false;
+  const up = nearTowerBase(), down = nearTowerHatch(); const T = up || down; if (!T) return false;
+  holster(true); PL.scoped = false; PL.crouchWant = false; PL.crouch = 0; PL.vel.set(0, 0, 0);
+  PL.climb = { T: T, up: !!up, t: 0 }; PL.tower = null; PL.pos.set(T.lad.x, 0, T.lad.z); PL.yaw = Math.atan2(T.dx, T.dz); PL.pitch = up ? 0.35 : -0.2;
+  sfx.step(0.6, 'hard'); return true;
+}
+function updateClimb(dt) {
+  const C = PL.climb, T = C.T; C.t += dt; const k = Math.min(1, C.t / TOWER_CLIMB_T);
+  PL.elev = (C.up ? k : 1 - k) * TOWER_Y; PL.pos.set(T.lad.x, 0, T.lad.z);
+  C.st = (C.st || 0) - dt; if (C.st <= 0) { C.st = 0.32; sfx.step(0.35, 'hard'); }
+  if (k >= 1) { PL.climb = null;
+    if (C.up) { PL.tower = T; PL.elev = TOWER_Y; PL.pos.set(T.cx + T.dx * 0.15, 0, T.cz + T.dz * 0.15); PL.yaw = Math.atan2(-(T.lookX - T.cx), -(T.lookZ - T.cz)); PL.pitch = -0.12; toast(T.name + ' — scope in and pick your shot', 2, '#9fd3ff'); }
+    else { PL.tower = null; PL.elev = 0; PL.pos.set(T.base.x, 0, T.base.z); PL.yaw = Math.atan2(-T.dx, -T.dz); PL.pitch = 0; } }
+}
+function towerClamp() { const T = PL.tower; PL.pos.x = clamp(PL.pos.x, T.cx - TOWER_WALK, T.cx + TOWER_WALK); PL.pos.z = clamp(PL.pos.z, T.cz - TOWER_WALK, T.cz + TOWER_WALK); }
+// see further from up high: push the fog back and draw people further away
+let _towerFog = 1;
+function updateTowerView() { const want = PL.elev > 3 ? 1.5 : 1; if (want === _towerFog) return; _towerFog = want; const q = QUALITY_PRESETS[qualityLevel];
+  scene.fog.near = q.fogNear * want; scene.fog.far = Math.min(q.far * 0.92 * want, camera.far - 5); }
+
 // ---------------- the player ----------------
 const START = { x: 4.5, z: 37.4, yaw: -Math.PI / 2 };
 const STARTS = { bus: { x: 4.5, z: 37.4, yaw: -Math.PI / 2, disguise: 'suit', name: 'Harbor Road bus stop' }, docks: { x: 97.5, z: 20.5, yaw: Math.PI / 2, disguise: 'worker', name: 'Docks locker room' }, yard: { x: 79.5, z: 70.5, yaw: -Math.PI / 2, disguise: 'waiter', name: 'Estate service yard' } };
 const PL_MAX_HP = 150;
-const PL = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, pitch: 0, crouch: 0, crouchWant: false, hp: PL_MAX_HP, dead: false, hidden: null, hiddenSafe: true, car: null, drag: null,
+const PL = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, pitch: 0, crouch: 0, crouchWant: false, hp: PL_MAX_HP, dead: false, hidden: null, hiddenSafe: true, tower: null, climb: null, elev: 0, car: null, drag: null,
   weapon: 'none', guns: {}, knives: 0, ads: 0, adsWant: false, coins: 4, disguise: 'suit', compromised: false, item: null, running: false, moving: false, moveSpeed: 0, trespass: false, crimeT: 0, takedown: null, reloadT: 0, fireCool: 0, stepT: 0, hurtT: 0, drawT: 0, bob: 0, kick: 0 };
 const MS = { time: 0, spotted: false, bodiesFound: 0, nonTargets: 0, combats: 0, targets: {}, shots: 0, headshots: 0, takedowns: 0, kos: 0, hiddenBodies: 0, escaping: null, over: false, accidents: 0, disguises: 1, compromised: {}, targetCause: {} };
 function lightFlash(x, y, z, intensity, dur, color) { if (qualityLevel === 'low') return; flashLight.position.set(x, y, z); flashLight.intensity = intensity; flashLight.color.setHex(color || 0xffc870); flashT = dur; }
-function playerTargetPts() { if (PL.car) return { x: PL.car.x, z: PL.car.z, y: 1.25, y2: 1.0 }; const c = PL.crouch; return { x: PL.pos.x, z: PL.pos.z, y: lerp(1.55, 0.95, c), y2: lerp(1.15, 0.65, c) }; }
+function playerTargetPts() { if (PL.car) return { x: PL.car.x, z: PL.car.z, y: 1.25, y2: 1.0 }; const c = PL.crouch; return { x: PL.pos.x, z: PL.pos.z, y: lerp(1.55, 0.95, c) + (PL.elev || 0), y2: lerp(1.15, 0.65, c) + (PL.elev || 0) }; }
 const coinGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.003, 10), coinMat = stdMat({ color: 0xd8b040, metalness: 0.9, roughness: 0.25 });
 const COINS = [];
 // ---------------- helpers ----------------
 function camFwd() { return new THREE.Vector3(-Math.sin(PL.yaw) * Math.cos(PL.pitch), Math.sin(PL.pitch), -Math.cos(PL.yaw) * Math.cos(PL.pitch)); }
-function eyeH() { return lerp(1.62, 1.0, PL.crouch); }
-function nearestBody(maxD) { let best = null, bd = maxD; BODIES.forEach(function (b) { if (b.cont || b.dragging) return; const d = Math.hypot(b.x - PL.pos.x, b.z - PL.pos.z); const d2 = Math.hypot(b.n.x - PL.pos.x, b.n.z - PL.pos.z); const m = Math.min(d, d2); if (m < bd) { bd = m; best = b; } }); return best; }
-function nearestContainer() { let best = null, bd = 99; CONTAINERS.forEach(function (c) { if (c.bodies.length >= c.cap) return; const d = Math.hypot(c.x - PL.pos.x, c.z - PL.pos.z); if (d < (c.reach || 1.4) && d < bd) { bd = d; best = c; } }); return best; }
-function nearestHide() { let best = null, bd = 1.5; HIDES.forEach(function (h) { const fx = h.x + h.fx * 0.9, fz = h.z + h.fz * 0.9, d = Math.hypot(fx - PL.pos.x, fz - PL.pos.z); if (d < bd) { bd = d; best = h; } }); return best; }
-function nearestCar() { let best = null, bd = 99; CARS.forEach(function (c) { if (inCarBox(c, PL.pos.x, PL.pos.z, 1.1)) { const d = Math.hypot(c.x - PL.pos.x, c.z - PL.pos.z); if (d < bd) { bd = d; best = c; } } }); return best; }
+function eyeH() { return lerp(1.62, 1.0, PL.crouch) + (PL.elev || 0); }
+function nearestBody(maxD) { if (offGround()) return null; let best = null, bd = maxD; BODIES.forEach(function (b) { if (b.cont || b.dragging) return; const d = Math.hypot(b.x - PL.pos.x, b.z - PL.pos.z); const d2 = Math.hypot(b.n.x - PL.pos.x, b.n.z - PL.pos.z); const m = Math.min(d, d2); if (m < bd) { bd = m; best = b; } }); return best; }
+function nearestContainer() { if (offGround()) return null; let best = null, bd = 99; CONTAINERS.forEach(function (c) { if (c.bodies.length >= c.cap) return; const d = Math.hypot(c.x - PL.pos.x, c.z - PL.pos.z); if (d < (c.reach || 1.4) && d < bd) { bd = d; best = c; } }); return best; }
+function nearestHide() { if (offGround()) return null; let best = null, bd = 1.5; HIDES.forEach(function (h) { const fx = h.x + h.fx * 0.9, fz = h.z + h.fz * 0.9, d = Math.hypot(fx - PL.pos.x, fz - PL.pos.z); if (d < bd) { bd = d; best = h; } }); return best; }
+function nearestCar() { if (offGround()) return null; let best = null, bd = 99; CARS.forEach(function (c) { if (inCarBox(c, PL.pos.x, PL.pos.z, 1.1)) { const d = Math.hypot(c.x - PL.pos.x, c.z - PL.pos.z); if (d < bd) { bd = d; best = c; } } }); return best; }
 function takedownTarget() {
-  if (PL.car || PL.hidden || PL.drag || PL.takedown) return null; let best = null, bd = 1.9;
+  if (PL.car || PL.hidden || PL.drag || PL.takedown || offGround()) return null; let best = null, bd = 1.9;
   NPCS.forEach(function (n) { if (n.dead || n.state === 'combat' || n.state === 'grabbed') return; const dx = PL.pos.x - n.x, dz = PL.pos.z - n.z, d = Math.hypot(dx, dz); if (d > bd) return;
     const f = fwdOf(n.yaw), c = (dx * f[0] + dz * f[1]) / (d || 1); const aware = n.susp > 0.6 || n.state === 'report' || n.state === 'flee' || n.state === 'escape';
     if (aware && !(n.state === 'cower')) return; if (c > -0.25 && n.state !== 'cower') return; // must be behind them
@@ -2301,9 +2372,9 @@ function takedownTarget() {
 function actionTakedown() { if (state !== 'play' || PL.dead || PL.car || PL.hidden) return false; const t = takedownTarget(); if (!t) return false; startTakedown(t, PL.weapon === 'knife' ? 'knife' : 'ko'); return true; }
 function actionDrag() { if (state !== 'play' || PL.dead || PL.car || PL.hidden || PL.takedown) return false;
   if (PL.drag) { const c = nearestContainer(); if (c) stashBody(PL.drag, c); else dropBody(); return true; }
-  if (ACC.interact()) return true;
+  if (offGround()) return false; if (ACC.interact()) return true;
   const b = nearestBody(1.9); if (b) { grabBody(b); return true; } return false; }
-function actionE() { if (!actionTakedown()) actionDrag(); }
+function actionE() { if (offGround()) { actionTower(); return; } if (!actionTakedown() && !actionDrag()) actionTower(); }
 function actionHide() { if (state !== 'play' || PL.dead || PL.takedown || PL.car) return false; if (PL.hidden) { leaveHide(); return true; } if (PL.drag) { toast('Drop the body first', 1.2); return true; } const h = nearestHide(); if (h) { enterHide(h); return true; } return false; }
 function actionCar() { if (state !== 'play' || PL.dead || PL.takedown || PL.hidden) return false; if (PL.car) { exitCar(); return true; } if (PL.drag) { toast('Drop the body first', 1.2); return true; } const c = nearestCar(); if (c) { enterCar(c); return true; } return false; }
 function actionF() { if (!actionHide()) actionCar(); }
@@ -2370,6 +2441,7 @@ function updatePlayer(dt, inp) {
     BODIES.forEach(function (b) { if (b.cont || b.dragging) return; const n = b.n; if (inCarBox(c, n.x, n.z, 0.2)) { const f = carFwd(c); n.x += f[0] * c.speed * dt * 1.1; n.z += f[1] * c.speed * dt * 1.1; n.h.root.position.set(n.x, 0, n.z); } });
     return; }
   if (PL.hidden) { PL.moving = false; PL.running = false; PL.moveSpeed = 0; return; }
+  if (PL.climb) { updateClimb(dt); PL.moving = false; PL.running = false; PL.moveSpeed = 0; return; }
   // walking
   PL.crouch += ((PL.crouchWant ? 1 : 0) - PL.crouch) * Math.min(1, dt * 9);
   const mx = inp.mx, mz = inp.mz, ml = Math.hypot(mx, mz);
@@ -2377,7 +2449,7 @@ function updatePlayer(dt, inp) {
   const maxSp = PL.drag ? 1.5 : PL.running ? 5.6 : lerp(3.0, 1.7, PL.crouch) * (PL.ads > 0.5 ? (PL.weapon === 'sniper' ? 0.4 : 0.7) : 1);
   const s = Math.sin(PL.yaw), c = Math.cos(PL.yaw); const wx = (mx * c - mz * s) * maxSp, wz = (-mx * s - mz * c) * maxSp; // mz: +1 = forward
   const k = Math.min(1, dt * 12); PL.vel.x += (wx - PL.vel.x) * k; PL.vel.z += (wz - PL.vel.z) * k;
-  PL.pos.x += PL.vel.x * dt; PL.pos.z += PL.vel.z * dt; collideCircle(PL.pos, 0.3);
+  PL.pos.x += PL.vel.x * dt; PL.pos.z += PL.vel.z * dt; if (PL.tower) towerClamp(); else collideCircle(PL.pos, 0.3);
   PL.moveSpeed = Math.hypot(PL.vel.x, PL.vel.z); PL.moving = PL.moveSpeed > 0.4;
   if (PL.moving) { PL.bob += dt * PL.moveSpeed * 2.2; PL.stepT -= dt * PL.moveSpeed; if (PL.stepT <= 0) { PL.stepT = 1.25; const g = GR.ground[idx(Math.floor(PL.pos.x), Math.floor(PL.pos.z))]; sfx.step(PL.crouch > 0.5 ? 0.25 : PL.running ? 1.2 : 0.7, g === GT.grass ? 'grass' : (g === GT.parquet || g === GT.planks) ? 'wood' : 'hard'); if (PL.running) emitNoise(PL.pos.x, PL.pos.z, 7, 'step'); } }
   updateDrag(dt);
@@ -2399,7 +2471,7 @@ function updateCamera(dt) {
 }
 function resetPlayer() {
   const S0 = STARTS[LOADOUT.start] || STARTS.bus;
-  Object.assign(PL, { yaw: S0.yaw, pitch: 0, crouch: 0, crouchWant: false, hp: PL_MAX_HP, dead: false, hidden: null, car: null, drag: null, coins: 4, crimeT: 0, takedown: null, camYaw: null, disguise: S0.disguise, compromised: false, item: null, scoped: false });
+  Object.assign(PL, { yaw: S0.yaw, pitch: 0, crouch: 0, crouchWant: false, hp: PL_MAX_HP, dead: false, hidden: null, car: null, drag: null, coins: 4, crimeT: 0, takedown: null, camYaw: null, disguise: S0.disguise, compromised: false, item: null, scoped: false, tower: null, climb: null, elev: 0 });
   PL.pos.set(S0.x, 0, S0.z); PL.vel.set(0, 0, 0); resetWeapons(); setSleeveColor(PLAYER_SLEEVE[PL.disguise]);
   COINS.forEach(function (c) { scene.remove(c.m); }); COINS.length = 0;
 }
@@ -2502,7 +2574,7 @@ function press(code) {
   if (has('aim')) { PL.adsWant = true; if (!isGun(PL.weapon)) drawGun(); }
   if (has('scope')) { if (!isGun(PL.weapon)) { drawGun(); PL.adsWant = true; } else PL.adsWant = !PL.adsWant; }
   if (has('holdBreath')) PL.holdBreath = true;
-  if (has('takedown') || has('drag') || has('disguise')) { let done = false; if (has('takedown')) done = actionTakedown(); if (!done && has('drag')) done = actionDrag(); if (!done && has('disguise')) takeDisguise(); }
+  if (has('takedown') || has('drag') || has('disguise')) { let done = false; if (has('takedown')) done = actionTakedown(); if (!done && has('drag')) done = actionDrag(); if (!done && (has('takedown') || has('drag'))) done = actionTower(); if (!done && has('disguise')) takeDisguise(); }
   if (has('hide') || has('car')) { let done = false; if (has('hide')) done = actionHide(); if (!done && has('car')) actionCar(); }
   if (has('crouch')) PL.crouchWant = !PL.crouchWant;
   if (has('throwKnife')) throwKnife(); if (has('coin')) throwCoin(); if (has('reload')) startReload(); if (has('suppressor')) toggleSuppressor();
@@ -2594,6 +2666,7 @@ function drawMinimap() {
   mctx.fillStyle = '#20303a'; mctx.fillRect(0, 0, S, S); mctx.imageSmoothingEnabled = false; mctx.translate(S / 2, S / 2); mctx.drawImage(mapCv, -cx * sc, -cz * sc, W * sc, H * sc);
   const done = TARGET_IDS.every(function (id) { return MS.targets[id]; });
   EXITS.forEach(function (e) { mctx.fillStyle = done ? 'rgba(127,214,138,.95)' : 'rgba(127,214,138,.35)'; mctx.fillRect((e.x0 - cx) * sc, (e.z0 - cz) * sc, (e.x1 - e.x0) * sc, (e.z1 - e.z0) * sc); });
+  TOWERS.forEach(function (T) { const x = (T.cx - cx) * sc, y = (T.cz - cz) * sc; if (Math.hypot(x, y) > S / 2 - 4) return; mctx.fillStyle = PL.tower === T ? '#9fd3ff' : '#e8c27a'; mctx.strokeStyle = '#1a120a'; mctx.lineWidth = 1.5; mctx.fillRect(x - 4, y - 4, 8, 8); mctx.strokeRect(x - 4, y - 4, 8, 8); mctx.fillStyle = '#1a120a'; mctx.fillRect(x - 1, y - 3, 2, 6); mctx.fillRect(x - 3, y - 3, 6, 2); });
   BODIES.forEach(function (b) { if (b.cont) return; mctx.strokeStyle = b.found ? '#ff6b5a' : '#bbb'; mctx.lineWidth = 2; const x = (b.x - cx) * sc, y = (b.z - cz) * sc; mctx.beginPath(); mctx.moveTo(x - 3, y - 3); mctx.lineTo(x + 3, y + 3); mctx.moveTo(x + 3, y - 3); mctx.lineTo(x - 3, y + 3); mctx.stroke(); });
   NPCS.forEach(function (n) { if (n.dead) return; let x = (n.x - cx) * sc, y = (n.z - cz) * sc; const dd = Math.hypot(x, y);
     if (n.kind === 'target') { if (dd > S / 2 - 8) { x *= (S / 2 - 8) / dd; y *= (S / 2 - 8) / dd; } mctx.fillStyle = '#ff3b30'; mctx.beginPath(); mctx.moveTo(x, y - 6); mctx.lineTo(x + 5, y); mctx.lineTo(x, y + 6); mctx.lineTo(x - 5, y); mctx.closePath(); mctx.fill(); mctx.strokeStyle = '#000'; mctx.lineWidth = 1; mctx.stroke(); return; }
@@ -2620,6 +2693,7 @@ function updateHUD(dt, det) {
     const t = !PL.car && !PL.hidden && !PL.takedown ? takedownTarget() : null; const tm = touch.mode; let act = '', hid = '', KE = tm ? 'ACTION' : K('takedown'), KF = tm ? 'HIDE' : K('hide'), dis = '', acc = '';
     if (t) { act = (PL.weapon === 'knife' ? 'Knife kill' : 'Subdue (knock out)') + (t.kind === 'target' ? ' — ' + t.name : ''); }
     else { KE = tm ? 'ACTION' : K('drag'); if (PL.drag) { const c = nearestContainer(); act = c ? 'Hide body in ' + c.name : 'Drop body'; } else if (!PL.car && !PL.hidden && !PL.takedown && (acc = ACC.prompt())) act = acc; else if (!PL.car && !PL.hidden && nearestBody(1.9)) act = 'Drag body'; }
+    const tw = !act ? towerPrompt() : ''; if (tw) { act = tw; KE = tm ? 'ACTION' : K('drag'); }
     const db = !PL.car && !PL.hidden && !PL.drag && !PL.takedown ? disguiseBody() : null; if (db) dis = 'Take outfit: ' + DISGUISES[db.d].label;
     if (PL.hidden) hid = 'Leave closet'; else if (PL.car) { hid = 'Get out of car'; KF = tm ? 'HIDE' : K('car'); } else if (!PL.drag && nearestHide()) hid = 'Hide in closet'; else if (!PL.drag && nearestCar()) { hid = 'Get in car'; KF = tm ? 'HIDE' : K('car'); }
     if (act) ptxt += '<kbd>' + KE + '</kbd>' + act; if (dis) ptxt += (ptxt ? ' &nbsp; ' : '') + '<kbd>' + (tm ? 'OUTFIT' : K('disguise')) + '</kbd>' + dis; if (hid) ptxt += (ptxt ? ' &nbsp; ' : '') + '<kbd>' + KF + '</kbd>' + hid;
@@ -2627,7 +2701,7 @@ function updateHUD(dt, det) {
     $('tb-outfit').classList.toggle('hot', !!dis); $('tb-outfit').style.display = dis ? '' : 'none'; $('tb-breath').style.display = PL.scoped ? '' : 'none';
     $('tb-throw').style.display = PL.knives > 0 ? '' : 'none'; $('tb-sup').style.display = curGun() && curGun().hasSup ? '' : 'none'; $('tb-reload').style.display = curGun() ? '' : 'none';
     $('tb-act').classList.toggle('hot', !!act); $('tb-hide').classList.toggle('hot', !!hid); $('tb-hide').textContent = PL.car ? 'EXIT CAR' : (!PL.drag && !PL.hidden && !nearestHide() && nearestCar()) ? 'CAR' : PL.hidden ? 'LEAVE' : 'HIDE';
-    $('tb-act').textContent = t ? (PL.weapon === 'knife' ? 'KNIFE KILL' : 'SUBDUE') : PL.drag ? (nearestContainer() ? 'STASH' : 'DROP') : acc ? 'USE' : 'ACTION';
+    $('tb-act').textContent = t ? (PL.weapon === 'knife' ? 'KNIFE KILL' : 'SUBDUE') : PL.drag ? (nearestContainer() ? 'STASH' : 'DROP') : acc ? 'USE' : tw ? (PL.tower ? 'DOWN' : 'CLIMB') : 'ACTION';
   }
   if (pr.innerHTML !== ptxt) pr.innerHTML = ptxt; pr.classList.toggle('hidden', !ptxt);
   // detection meter + status (smooth)
@@ -2674,7 +2748,7 @@ function autoQuality(raw) { if (qualityMode !== 'auto' || state !== 'play') { fp
   if (fps >= 42) return; const i = QUALITY_ORDER.indexOf(qualityLevel); if (i > 0) { applyQuality(QUALITY_ORDER[i - 1]); toast('Quality: ' + QUALITY_PRESETS[qualityLevel].label + ' (auto)', 1.5, '#9fd3ff'); } else if (prScale > 0.75) { prScale = 0.75; applyQuality('low'); } }
 function step(dt) {
   if (state === 'play') {
-    MS.time += dt; const inp = readInput(); updatePlayer(dt, inp);
+    MS.time += dt; const inp = readInput(); updatePlayer(dt, inp); updateTowerView();
     if (mouseDown || touch.fireId !== null) { /* semi-auto: one shot per press */ }
     const det = updateNPCs(dt); ACC.update(dt); updateCoins(dt); updateTracers(dt);
     // exits
@@ -2708,7 +2782,7 @@ function frame(now) {
 setLabels(); bestLine(); updateHelpline(); applyQuality(qualityLevel); applyTimeOfDay(LOADOUT.tod); resetPlayer(); spawnNPCs(99); ACC.reset(); PL.hidden = null;
 requestAnimationFrame(frame);
 window.__silent = { COINS: COINS, PL: PL, NPCS: NPCS, BODIES: BODIES, CARS: CARS, SITES: SITES, MS: MS, CONTAINERS: CONTAINERS, HIDES: HIDES, GR: GR, W: W, H: H, AREAS: AREAS, EXITS: EXITS, keys: keys, INST: INST,
-  startMission: startMission, actionE: actionE, actionF: actionF, fire: fire, actionTakedown: actionTakedown, actionDrag: actionDrag, actionHide: actionHide, actionCar: actionCar, applyHit: applyHit, ZONE_DMG: ZONE_DMG, takeDisguise: takeDisguise, disguiseBody: disguiseBody, ACC: ACC, equip: equip, cycleWeapon: cycleWeapon, LOADOUT: LOADOUT, KEYMAP: KEYMAP, KB_DEFAULT: KB_DEFAULT, press: press, release: release, setOutfit: setOutfit, shootRay: shootRay, throwKnife: throwKnife, toggleSuppressor: toggleSuppressor, startReload: startReload, DISGUISES: DISGUISES, applyTimeOfDay: applyTimeOfDay, showMenu: showMenu, CHALLENGES: CHALLENGES, startTakedown: startTakedown, illegalFor: illegalFor, weaponVisible: weaponVisible, fireShot: fireShot, KNIVES: KNIVES, get rebinding() { return rebinding; }, throwCoin: throwCoin, takedownTarget: takedownTarget, toggleGun: toggleGun, drawGun: drawGun, losClear: losClear, findPath: findPath, npcSeesPlayer: npcSeesPlayer,
+  TOWERS: TOWERS, actionTower: actionTower, startMission: startMission, actionE: actionE, actionF: actionF, fire: fire, actionTakedown: actionTakedown, actionDrag: actionDrag, actionHide: actionHide, actionCar: actionCar, applyHit: applyHit, ZONE_DMG: ZONE_DMG, takeDisguise: takeDisguise, disguiseBody: disguiseBody, ACC: ACC, equip: equip, cycleWeapon: cycleWeapon, LOADOUT: LOADOUT, KEYMAP: KEYMAP, KB_DEFAULT: KB_DEFAULT, press: press, release: release, setOutfit: setOutfit, shootRay: shootRay, throwKnife: throwKnife, toggleSuppressor: toggleSuppressor, startReload: startReload, DISGUISES: DISGUISES, applyTimeOfDay: applyTimeOfDay, showMenu: showMenu, CHALLENGES: CHALLENGES, startTakedown: startTakedown, illegalFor: illegalFor, weaponVisible: weaponVisible, fireShot: fireShot, KNIVES: KNIVES, get rebinding() { return rebinding; }, throwCoin: throwCoin, takedownTarget: takedownTarget, toggleGun: toggleGun, drawGun: drawGun, losClear: losClear, findPath: findPath, npcSeesPlayer: npcSeesPlayer,
   get state() { return state; }, get quality() { return qualityLevel; }, step: step, render: render, updateCamera: updateCamera, nearestContainer: nearestContainer, nearestHide: nearestHide, nearestCar: nearestCar, setTouchMode: setTouchMode, touch: touch,
   aimAt: function (x, y, z) { const dx = x - PL.pos.x, dz = z - PL.pos.z, dy = y - eyeH(); PL.yaw = Math.atan2(-dx, -dz); PL.pitch = Math.atan2(dy, Math.hypot(dx, dz)); }, killNpc: killNpc, emitNoise: emitNoise, PROPS: PROPS, staticSolid: staticSolid, restrictedAt: restrictedAt };
 })();
